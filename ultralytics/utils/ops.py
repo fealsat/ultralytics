@@ -14,6 +14,8 @@ import torchvision
 from ultralytics.utils import LOGGER
 from ultralytics.utils.metrics import batch_probiou
 
+import nms_var
+
 
 class Profile(contextlib.ContextDecorator):
     """
@@ -86,7 +88,7 @@ def segment2box(segment, width=640, height=640):
     )  # xyxy
 
 
-def scale_boxes(img1_shape, boxes, img0_shape, ratio_pad=None, padding=True, xywh=False):
+def scale_boxes(img1_shape, boxes, img0_shape, ratio_pad=None, padding=True, xywh=False, var_boxes=None):
     """
     Rescales bounding boxes (in the format of xyxy by default) from the shape of the image they were originally
     specified in (img1_shape) to the shape of a different image (img0_shape).
@@ -100,9 +102,12 @@ def scale_boxes(img1_shape, boxes, img0_shape, ratio_pad=None, padding=True, xyw
         padding (bool): If True, assuming the boxes is based on image augmented by yolo style. If False then do regular
             rescaling.
         xywh (bool): The box format is xywh or not, default=False.
+        var_boxes (torch.Tensor | None): the variances of bounding boxes and scores of the objects in the image, in the  
+            format of (x, y, w, h, score)
 
     Returns:
         boxes (torch.Tensor): The scaled bounding boxes, in the format of (x1, y1, x2, y2)
+        var_boxes (torch.Tensor | None): The scaled variances of bounding boxes, in the format of (x, y, w, h, score)
     """
     if ratio_pad is None:  # calculate from img0_shape
         gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])  # gain  = old / new
@@ -121,7 +126,9 @@ def scale_boxes(img1_shape, boxes, img0_shape, ratio_pad=None, padding=True, xyw
             boxes[..., 2] -= pad[0]  # x padding
             boxes[..., 3] -= pad[1]  # y padding
     boxes[..., :4] /= gain
-    return clip_boxes(boxes, img0_shape)
+    if var_boxes is not None:
+        var_boxes[..., :4] /= gain ** 2
+    return clip_boxes(boxes, img0_shape), var_boxes
 
 
 def make_divisible(x, divisor):
@@ -228,6 +235,7 @@ def non_max_suppression(
 
     t = time.time()
     output = [torch.zeros((0, 6 + nm), device=prediction.device)] * bs
+    var_output = [torch.zeros((0, 5), device=prediction.device)] * bs
     for xi, x in enumerate(prediction):  # image index, image inference
         # Apply constraints
         # x[((x[:, 2:4] < min_wh) | (x[:, 2:4] > max_wh)).any(1), 4] = 0  # width-height
@@ -274,7 +282,9 @@ def non_max_suppression(
             i = nms_rotated(boxes, scores, iou_thres)
         else:
             boxes = x[:, :4] + c  # boxes (offset by class)
-            i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+            # i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+            i, vars_xi = nms_var.nms(boxes, scores, iou_thres, top_k=max_det) # Custom NMS
+            var_output[xi] = vars_xi[:max_det]
         i = i[:max_det]  # limit detections
 
         # # Experimental
@@ -294,7 +304,7 @@ def non_max_suppression(
             LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded")
             break  # time limit exceeded
 
-    return output
+    return output, var_output
 
 
 def clip_boxes(boxes, shape):
