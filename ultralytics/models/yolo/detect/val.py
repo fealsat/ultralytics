@@ -116,7 +116,7 @@ class DetectionValidator(BaseValidator):
 
     def update_metrics(self, preds, batch):
         """Metrics."""
-        for si, pred in enumerate(preds):
+        for si, (pred, _) in enumerate(zip(*preds)):
             self.seen += 1
             npr = len(pred)
             stat = dict(
