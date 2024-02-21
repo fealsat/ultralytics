@@ -71,6 +71,7 @@ class Results(SimpleClass):
         orig_img (numpy.ndarray): Original image as a numpy array.
         orig_shape (tuple): Original image shape in (height, width) format.
         boxes (Boxes, optional): Object containing detection bounding boxes.
+        var_boxes (Boxes, optional): Object containing variances of detection bounding boxes.
         masks (Masks, optional): Object containing detection masks.
         probs (Probs, optional): Object containing class probabilities for classification tasks.
         keypoints (Keypoints, optional): Object containing detected keypoints for each object.
@@ -94,7 +95,7 @@ class Results(SimpleClass):
         tojson(normalize=False): Converts detection results to JSON format.
     """
 
-    def __init__(self, orig_img, path, names, boxes=None, masks=None, probs=None, keypoints=None, obb=None) -> None:
+    def __init__(self, orig_img, path, names, boxes=None, var_boxes=None, masks=None, probs=None, keypoints=None, obb=None) -> None:
         """
         Initialize the Results class.
 
@@ -103,6 +104,7 @@ class Results(SimpleClass):
             path (str): The path to the image file.
             names (dict): A dictionary of class names.
             boxes (torch.tensor, optional): A 2D tensor of bounding box coordinates for each detection.
+            var_boxes (torch.tensor, optional): A 2D tensor of bounding box variances for each detection.
             masks (torch.tensor, optional): A 3D tensor of detection masks, where each mask is a binary image.
             probs (torch.tensor, optional): A 1D tensor of probabilities of each class for classification task.
             keypoints (torch.tensor, optional): A 2D tensor of keypoint coordinates for each detection.
@@ -110,6 +112,7 @@ class Results(SimpleClass):
         """
         self.orig_img = orig_img
         self.orig_shape = orig_img.shape[:2]
+        self.var_boxes = var_boxes
         self.boxes = Boxes(boxes, self.orig_shape) if boxes is not None else None  # native size boxes
         self.masks = Masks(masks, self.orig_shape) if masks is not None else None  # native size or imgsz masks
         self.probs = Probs(probs) if probs is not None else None
@@ -119,7 +122,7 @@ class Results(SimpleClass):
         self.names = names
         self.path = path
         self.save_dir = None
-        self._keys = "boxes", "masks", "probs", "keypoints", "obb"
+        self._keys = "boxes", "var_boxes", "masks", "probs", "keypoints", "obb"
 
     def __getitem__(self, idx):
         """Return a Results object for the specified index."""
