@@ -293,7 +293,7 @@ def non_max_suppression(
             #
             del i
             del vars_xi
-            gc.collect()
+            #gc.collect()
             #i, vars_xi = (res.to(x.device) for res in nms_var.nms(boxes, scores, iou_thres, top_k=max_det))
             var_output[xi] = vars_xi_t[:max_det]
         i = i_t[:max_det]  # limit detections
