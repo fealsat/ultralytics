@@ -289,7 +289,7 @@ def non_max_suppression(
             i_t = torch.empty_like(i)
             vars_xi_t = torch.empty_like(vars_xi)
             i_t[:] = i
-            vars_xi_t[:] = vars_xi
+            vars_xi_t[:, :] = vars_xi
             #
             del i
             del vars_xi
