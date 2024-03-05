@@ -14,6 +14,8 @@ import torchvision
 from ultralytics.utils import LOGGER
 from ultralytics.utils.metrics import batch_probiou
 
+import warnings
+warnings.filterwarnings('ignore')
 from fuzzy_cython_bbox import bbox_overlaps as bbox_ious
 
 
@@ -226,9 +228,11 @@ def nms_var_slow(boxes, scores, threshold):
             np.ascontiguousarray(boxes[other_indices].cpu(), dtype=float)
         )
         # Compute variances of boxes with IoU > threshold.
-        var_keep.append(var_boxes(boxes, scores, other_indices[ious > threshold]))
+        var_keep.append(var_boxes(
+            boxes, scores, torch.cat((i[None], other_indices[ious[0] > threshold]))
+        ))
         # Keep indices of boxes with IoU <= threshold.
-        indices = other_indices[ious <= threshold]
+        indices = other_indices[ious[0] <= threshold]
     return torch.tensor(keep, dtype=torch.int64), torch.stack(var_keep)
 
 
