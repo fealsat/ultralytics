@@ -287,7 +287,7 @@ def non_max_suppression(
             i, vars_xi = nms_var.nms(boxes, scores, iou_thres, top_k=max_det) # Custom NMS
             #
             i_t = torch.empty_like(i)
-            vars_xi_t = torch.empty_like(i)
+            vars_xi_t = torch.empty_like(vars_xi)
             i_t[:] = i
             vars_xi_t[:] = vars_xi
             #
