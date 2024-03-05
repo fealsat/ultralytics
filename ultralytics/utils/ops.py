@@ -15,6 +15,7 @@ from ultralytics.utils import LOGGER
 from ultralytics.utils.metrics import batch_probiou
 
 import nms_var
+import gc  # garbage collection
 
 
 class Profile(contextlib.ContextDecorator):
@@ -283,10 +284,19 @@ def non_max_suppression(
         else:
             boxes = x[:, :4] + c  # boxes (offset by class)
             # i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
-            # i, vars_xi = nms_var.nms(boxes, scores, iou_thres, top_k=max_det) # Custom NMS
-            i, vars_xi = (res.to(x.device) for res in nms_var.nms(boxes, scores, iou_thres, top_k=max_det))
-            var_output[xi] = vars_xi[:max_det]
-        i = i[:max_det]  # limit detections
+            i, vars_xi = nms_var.nms(boxes, scores, iou_thres, top_k=max_det) # Custom NMS
+            #
+            i_t = torch.empty_like(i)
+            vars_xi_t = torch.empty_like(i)
+            i_t[:] = i
+            vars_xi_t[:] = vars_xi
+            #
+            del i
+            del vars_xi
+            gc.collect()
+            #i, vars_xi = (res.to(x.device) for res in nms_var.nms(boxes, scores, iou_thres, top_k=max_det))
+            var_output[xi] = vars_xi_t[:max_det]
+        i = i_t[:max_det]  # limit detections
 
         # # Experimental
         # merge = False  # use merge-NMS
