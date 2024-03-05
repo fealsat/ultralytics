@@ -14,7 +14,7 @@ import torchvision
 from ultralytics.utils import LOGGER
 from ultralytics.utils.metrics import batch_probiou
 
-import nms_var
+from fuzzy_cython_bbox import bbox_overlaps as bbox_ious
 
 
 class Profile(contextlib.ContextDecorator):
@@ -167,6 +167,71 @@ def nms_rotated(boxes, scores, threshold=0.45):
     return sorted_idx[pick]
 
 
+def var_boxes(boxes, scores, idx_high_iou_with_i):
+    """
+    Calculate the variance of bounding boxes strongly overlapping with the i-th one.
+
+    Args:
+        boxes (Tensor): Tensor of shape (N, 4) representing N bounding boxes in (x1, y1, x2, y2) format.
+        idx_high_iou_with_i (Tensor): Tensor of shape (M,) with the indices of the strongly overlapping boxes.
+
+    Returns:
+        variances (Tensor): Tensor of shape (M,4) representing variances in (x, y, w, h) format.
+    """
+    x1 = boxes[idx_high_iou_with_i, 0]
+    y1 = boxes[idx_high_iou_with_i, 1]
+    x2 = boxes[idx_high_iou_with_i, 2]
+    y2 = boxes[idx_high_iou_with_i, 3]
+    # Get variances of boxes and scores
+    var_x = torch.var(0.5*(x1 + x2), unbiased=True)
+    var_y = torch.var(0.5*(y1 + y2), unbiased=True)
+    var_w = torch.var(x2 - x1, unbiased=True)
+    var_h = torch.var(y2 - y1, unbiased=True)
+    var_s = torch.var(scores[idx_high_iou_with_i], unbiased=True)
+    variances = torch.stack((var_x, var_y, var_w, var_h, var_s),-1)
+    return torch.zeros(5, device=boxes.device) if variances.isnan().all() else variances 
+
+
+def nms_var_slow(boxes, scores, threshold):
+    """
+    Apply non-maximum suppression while estimating variance of strongly overlapping bounding boxes.
+
+    Args:
+        boxes (Tensor): Tensor of shape (N, 4) representing N bounding boxes in (x1, y1, x2, y2) format.
+        scores (Tensor): Tensor of shape (N,) representing confidence scores for each bounding box.
+        threshold (float): Threshold value to determine overlapping boxes.
+
+    Returns:
+        keep (Tensor): Index of the boxes to keep after NMS.
+        var_keep (Tensor): Tensor of shape (N, 4) representing variances in (x, y, w, h) format.
+    """
+    if len(boxes) == 0:
+        return torch.empty(0, dtype=torch.int64), torch.empty((0,4), dtype=torch.float)
+
+    # Sort the bounding boxes by their confidence scores in descending order.
+    _, indices = scores.sort(descending=True)
+
+    # Initialize an empty list to store the indices of the boxes to keep.
+    keep, var_keep = [], []
+
+    while len(indices) > 0:
+        # Get the index of the highest confidence score box.
+        i, other_indices = indices[0], indices[1:]
+        # Add the current box index to the list of boxes to keep.
+        keep.append(i)
+        # Calculate the intersection over union (IoU) between the current box and all other boxes.
+        # ious = calculate_iou(boxes[i], boxes[other_indices])
+        ious = bbox_ious(
+            np.ascontiguousarray(boxes[i][None,:].cpu(), dtype=float),
+            np.ascontiguousarray(boxes[other_indices].cpu(), dtype=float)
+        )
+        # Compute variances of boxes with IoU > threshold.
+        var_keep.append(var_boxes(boxes, scores, other_indices[ious > threshold]))
+        # Keep indices of boxes with IoU <= threshold.
+        indices = other_indices[ious <= threshold]
+    return torch.tensor(keep, dtype=torch.int64), torch.stack(var_keep)
+
+
 def non_max_suppression(
     prediction,
     conf_thres=0.25,
@@ -284,7 +349,8 @@ def non_max_suppression(
             boxes = x[:, :4] + c  # boxes (offset by class)
             # i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
             # i, vars_xi = nms_var.nms(boxes, scores, iou_thres, top_k=max_det) # Custom NMS
-            i, vars_xi = (res.to(x.device) for res in nms_var.nms(boxes, scores, iou_thres, top_k=max_det))
+            # i, vars_xi = (res.to(x.device) for res in nms_var.nms(boxes, scores, iou_thres, top_k=max_det))
+            i, vars_xi = (res.to(x.device) for res in nms_var_slow(boxes, scores, iou_thres))
             var_output[xi] = vars_xi[:max_det]
         i = i[:max_det]  # limit detections
 
