@@ -280,14 +280,15 @@ def non_max_suppression(
         if rotated:
             boxes = torch.cat((x[:, :2] + c, x[:, 2:4], x[:, -1:]), dim=-1)  # xywhr
             i = nms_rotated(boxes, scores, iou_thres)
+            # for completeness let's add this here
+            i = i[:max_det]
         else:
             boxes = x[:, :4] + c  # boxes (offset by class)
             # i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
             #i, vars_xi = nms_var.nms(boxes, scores, iou_thres, top_k=max_det) # Custom NMS
-            # set the top_k to a very high number
-            i, vars_xi = (res.to(x.device) for res in nms_var.nms(boxes, scores, iou_thres, top_k=1000))#max_det))
-            var_output[xi] = vars_xi[:max_det]
-        i = i[:max_det]  # limit detections
+            i, vars_xi = (res.to(x.device) for res in nms_var.nms(boxes, scores, iou_thres, top_k=max_det))
+            #var_output[xi] = vars_xi[:max_det]
+        #i = i[:max_det]  # limit detections  # this is not necessary anymore, because the detections are internally limited
 
         # # Experimental
         # merge = False  # use merge-NMS
