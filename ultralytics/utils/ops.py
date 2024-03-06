@@ -286,7 +286,7 @@ def non_max_suppression(
             boxes = x[:, :4] + c  # boxes (offset by class)
             # i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
             #i, vars_xi = nms_var.nms(boxes, scores, iou_thres, top_k=max_det) # Custom NMS
-            i, var_output = (res.to(x.device) for res in nms_var.nms(boxes, scores, iou_thres, top_k=max_det))
+            i, vars_xi = (res.to(x.device) for res in nms_var.nms(boxes, scores, iou_thres, top_k=max_det))
             var_output[xi] = vars_xi
         #i = i[:max_det]  # limit detections  # this is not necessary anymore, because the detections are internally limited
 
